@@ -1,0 +1,7 @@
+// USES
+
+echo \nTo use a .pcmd file, write code line by line as if you were executing it from the normal pcmd terminal.
+echo Note: This is still experimental but you may use {GETVAR(variable)}\n\nCurrent List of Variables:
+echo CWD: The VARS.directory variable (What directory is displayed to the user in the terminal)
+echo DESKTOP: Desktop path
+echo RUNPATH: The parent path of main.py\n
