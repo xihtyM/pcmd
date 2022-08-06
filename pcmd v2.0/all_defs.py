@@ -1,6 +1,7 @@
 # All defines/functions
 
 from ast import literal_eval
+from statistics import mean
 from typing import Union as MultipleReturn
 import platform as SYSPLAT
 import re
@@ -20,6 +21,16 @@ class SYS:
     FULLOSNAME = SYSPLAT.platform()
     ARCH = SYSPLAT.machine()
     USRPROFILE = ""
+    SYSTEM_VARNAMES = (
+        "__CWD__",
+        "__RUNPATH__",
+        "__USR__",
+        "__DESKTOP__",
+        "__OSNAME__",
+        "__FULLOSNAME__",
+        "__ARCH__"
+    )
+    SYSTEM_VARNAME_PROTECT = False
 
 USR_DEFINED_VARIABLES: list[tuple] = [
     # DO NOT ADD DIRECTLY HERE, USE "add_usrvars" FUNCTION
@@ -54,7 +65,7 @@ def rgb(r: int, g: int, b: int, txt: str, end: str = "\u001B[0m") -> str:
     r, g, b = str(r), str(g), str(b)
     return f"\u001b[38;2;{r};{g};{b}m{txt}{end}"
 
-def rgbl(* msg: tuple, color: list[int], seperator: str = " ", fin: str = "\n", reset_color: bool = True) -> None:
+def rgbl(* msg, color: list[int], seperator: str = " ", fin: str = "\n", reset_color: bool = True) -> None:
     """Writes a colored message to the standard output in chosen color"""
     print(rgb(color[0], color[1], color[2], "", end = ""), end = "")
     for index, val in enumerate(msg):
@@ -64,7 +75,7 @@ def rgbl(* msg: tuple, color: list[int], seperator: str = " ", fin: str = "\n", 
     cleanup = "\u001B[0m" if reset_color else ""
     print(fin, end = cleanup)
 
-def printlines(* msg: tuple, _sep: str = " ", _end: str = "\n") -> None:
+def printlines(* msg, _sep: str = " ", _end: str = "\n") -> None:
     for index, val in enumerate(msg[0]):
         val = str(val) if not type(val) == str else val
         print(val, end = "")
@@ -72,7 +83,7 @@ def printlines(* msg: tuple, _sep: str = " ", _end: str = "\n") -> None:
             print(_sep, end = "")
     print(_end, end = "\u001B[0m")
 
-def errmsg(* msg: tuple, seperator: str = " ", fin: str = "\n") -> None:
+def errmsg(* msg, seperator: str = " ", fin: str = "\n") -> None:
     """Writes a message to the standard output in red"""
     print(rgb(200, 0, 0, "", end = ""), end = "")
     printlines(msg, _sep = seperator, _end = fin)
@@ -176,7 +187,7 @@ if IMPORTS.OS:
             return os.path.dirname(os.path.realpath(os.getcwd()))
     def getdir() -> str:
         try:
-            return ("", open(getcwd() + "/vars/dir", "r", encoding = "utf-8").read()) [os.path.isfile(getcwd() + "/vars/dir")]
+            return open(getcwd() + "/vars/dir", "r", encoding = "utf-8").read()
         except FileNotFoundError:
             return "FileNotFoundError"
     def update_dir(path: str) -> bool:
@@ -197,9 +208,16 @@ VARS.directory = getdir()
 def tuple_to_lower(tp: tuple) -> tuple:
 	"""Returns tuple in all lowercase letters"""
 	tuple_list = list(tp)
-	for i,val in enumerate(tuple_list):
+	for i, val in enumerate(tuple_list):
 		if (type(val) == str): tuple_list[i] = val.lower()
 	return tuple(tuple_list)
+
+def get_float_place(value: float) -> int:
+    float_place = 0
+    while int(value) != value:
+        value = value * 10
+        float_place += 1
+    return float_place
 
 def CIS_CMD(* command: tuple, OS_FUNC: bool = False, TIME_FUNC: bool = False, arguments: list[str], lwr: bool = True) -> bool:
     if lwr:
@@ -217,29 +235,32 @@ def CIS_CMD(* command: tuple, OS_FUNC: bool = False, TIME_FUNC: bool = False, ar
     return arguments[0].lower() in command
 
 def IS_CMD(* command: tuple, OS_FUNC: bool = False, TIME_FUNC: bool = False, arguments: list[str], lwr: bool = True, prefix: str = "") -> bool:
-    for i in tuple_to_lower(command):
+    lowered_command = tuple_to_lower(command)
+    for i in lowered_command:
         if i in ("&&", "echo", "print", "pcmd", "vfree", "captout", "if", "var"):
             errmsg(f"Error: Command {i} is reserved for comm.py only, do not use this name")
             return False
     
     if lwr:
-        command = tuple_to_lower(command)
+        command = lowered_command
         prefix = prefix.lower()
 
-    if(len(arguments) < 1):
+    if len(arguments) < 1:
         return False
+    
     if OS_FUNC and not IMPORTS.OS:
         return False
     if TIME_FUNC and not IMPORTS.TIME:
         return False
+    
     if type(arguments[0]) != str:
         return False
     
-    if prefix:
-        command_2 = tuple([prefix + "::" + end for end in command])
-        return arguments[0].lower() in command or arguments[0].lower() in command_2
-
-    return arguments[0].lower() in command
+    if not prefix:
+        return arguments[0].lower() in command
+    
+    command_2 = tuple([prefix + "::" + end for end in command])
+    return arguments[0].lower() in command or arguments[0].lower() in command_2
 
 def remove_path_from(path: str, remove: str) -> str:
     list_of_path_contents = []
@@ -304,17 +325,17 @@ def get_directory_size(path: str) -> int:
         return 0
 
     size = 0
-    d_list = os.listdir(path)
 
-    if not d_list:
-        return 0
-    
-    for val in d_list:
-        t_path = path + "/" + val
-        if os.path.isdir(t_path):
-            size += get_directory_size(t_path)
-            continue
-        size += os.path.getsize(t_path)
+    d_list = os.scandir(path)
+
+    for entry in d_list:
+        try:
+            if entry.is_file() and not entry.is_symlink():
+                size += entry.stat().st_size
+            elif entry.is_dir():
+                size += get_directory_size(entry.path)
+        except:
+            pass
     
     return size
 
@@ -392,16 +413,24 @@ def add_dir(path: str) -> str:
 
 def get_parent(path: str) -> str:
     c = path.count("/")
-    return path[0 : find(path, "/", c - 1) - 1 if c > 0 else len(path)]
+    if c - 1 >= 0:
+        if SYS.win32:
+            return path[0 : find(path, "/", c - 1) - 1]
+        else:
+            return path[0 : find(path, "/", c - 2) - 1]
 
 def add_vars(command: str) -> str:
 
+    if command.find("{") == -1 and command.find("}") == -1:
+        return command
+
+    c = vargs(command)[0]
+    command = command[len(c):].lstrip()
+
     for USR_VAR in USR_DEFINED_VARIABLES:
-        c = vargs(command)[0]
-        
-        command = command[len(c):].lstrip()
         command = command.replace("{" + USR_VAR[0] + "}", str(USR_VAR[1]))
-        command = c + " " + command
+    
+    command = c + " " + command
 
     return command
 
@@ -409,6 +438,11 @@ def add_usrvars(var: tuple[str, any]) -> None:
     if var[0].find("}") != -1 or var[0].find("{") != -1:
         errmsg("Error: Could not create variable, illegal usage - { or } are not allowed for use in variables as they are used to initilize them")
         return
+    
+    if var[0] in SYS.SYSTEM_VARNAMES and SYS.SYSTEM_VARNAME_PROTECT:
+        errmsg(f"Error: Could not create variable, illegal usage - {var[0]} is reserved for system implementation")
+        return
+
     for index, v in enumerate(USR_DEFINED_VARIABLES):
         if v[0] == var[0]:
             USR_DEFINED_VARIABLES[index] = var
@@ -419,10 +453,14 @@ def add_usrvars(var: tuple[str, any]) -> None:
 def rem_usrvars(var_name: str) -> bool:
     """ Removes a variable from USR_DEFINED_VARIABLES \n
         Returns true if variable was found, otherwise false """
+    if var_name in SYS.SYSTEM_VARNAMES and SYS.SYSTEM_VARNAME_PROTECT:
+        errmsg(f"Error: Could not remove variable \"{var_name}\" as it is reserved for system implementation")
+        return False
     for index, tuples in enumerate(USR_DEFINED_VARIABLES):
         if tuples[0] == var_name:
             USR_DEFINED_VARIABLES.pop(index)
             return True
+    errmsg(f"Error: Could not remove variable \"{var_name}\" as it was not found")
     return False
     
 def IF_CMD_INT(ARGS: list[str], ARGLEN: int) -> MultipleReturn[int, bool]:
@@ -530,18 +568,27 @@ def IF_CMD_INT(ARGS: list[str], ARGLEN: int) -> MultipleReturn[int, bool]:
         
         if val == "do":
             is_equal = (add == add_2 and equal)
+            float_is_equal = ((type(add) == float and type(add_2) == float and (
+                add_2 - (5 / 10**get_float_place(add_2))) <= add <= (add_2 + (5 / 10**get_float_place(add_2))
+                )
+            ) and equal)
+            
             is_not_equal = (add != add_2 and not_equal)
             is_str_and_add_or_1 = ((not (not_equal or equal)) and add == 1 or (type(add) == str and not add_2))
             
-            end: bool = is_equal or is_not_equal or is_str_and_add_or_1
+            end: bool = is_equal or is_not_equal or is_str_and_add_or_1 or float_is_equal
             
             return (ind + 1 if end else end)
         
     is_equal = (add == add_2 and equal)
+    float_is_equal = ((type(add) == float and type(add_2) == float and (
+                add_2 - (5 / 10**get_float_place(add_2))) <= add <= (add_2 + (5 / 10**get_float_place(add_2))
+                )
+            ) and equal)
     is_not_equal = (add != add_2 and not_equal)
     is_str_and_add_or_1 = ((not (not_equal or equal)) and add == 1 or (type(add) == str and not add_2))
     
-    end: bool = is_equal or is_not_equal or is_str_and_add_or_1
+    end: bool = is_equal or is_not_equal or is_str_and_add_or_1 or float_is_equal
     
     return (end)
 
@@ -559,37 +606,70 @@ def remove_ansi(line: str) -> str:
 def re_implement_std_vars() -> None:
     """ALL STANDARD DEFINED USRVARS - CANNOT BE FREED UNTIL PROGRAM ENDS"""
     
-    add_usrvars((
-        "__USR__",
-        SYS.USRPROFILE                                                                           # Path to USRPROFILE
-    ))
-    
-    add_usrvars((
-        "__DESKTOP__",
-        SYS.USRPROFILE + "/Desktop"                                                              # Path to desktop
-    ))
-    
+    SYS.SYSTEM_VARNAME_PROTECT = False
+
     add_usrvars((
         "__CWD__",
         VARS.directory                                                                           # Current directory
     ))
 
-    add_usrvars((
-        "__RUNPATH__",
-        getcwd()                                                                                 # Path to main.py
-    ))
+    SYS.SYSTEM_VARNAME_PROTECT = True
+
+def remove_double_slash_comment(line: str) -> str:
+    double_slash_comment = False
+    in_quotes = False
+
+    if line.find("//") == -1:
+        return line
+
+    for ind, ch in enumerate(line):
+        if ch == "/" and not in_quotes:
+            if double_slash_comment:
+                return line[0 : ind - 1]
+            double_slash_comment = True
+            continue
+        if ch == "\"":
+            in_quotes = not in_quotes
+        double_slash_comment = False
     
-    add_usrvars((
-        "__OSNAME__",
-        SYS.OSNAME                                                                               # Operating system short name
-    ))
+    return line
+
+def reload_pcmd() -> None:
+    print("Reloading...")
+    MAIN_FILE = getcwd() + "/main.py"
+    clear_screen()
     
-    add_usrvars((
-        "__FULLOSNAME__",
-        SYS.FULLOSNAME                                                                           # Full operating system name
-    ))
-    
-    add_usrvars((
-        "__ARCH__",
-        SYS.ARCH                                                                                 # Architecture computer uses
-    ))
+
+# ALL VARIABLES
+
+add_usrvars((
+    "__USR__",
+    SYS.USRPROFILE                                                                           # Path to USRPROFILE
+))
+
+add_usrvars((
+    "__DESKTOP__",
+    SYS.USRPROFILE + "/Desktop"                                                              # Path to desktop
+))
+
+add_usrvars((
+    "__OSNAME__",
+    SYS.OSNAME                                                                               # Operating system short name
+))
+
+add_usrvars((
+    "__FULLOSNAME__",
+    SYS.FULLOSNAME                                                                           # Full operating system name
+))
+
+add_usrvars((
+    "__ARCH__",
+    SYS.ARCH                                                                                 # Architecture computer uses
+))
+
+add_usrvars((
+    "__RUNPATH__",
+    get_real_path(getcwd())                                                                                 # Path to main.py
+))
+
+SYS.SYSTEM_VARNAME_PROTECT = True

@@ -23,7 +23,7 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
         
         path = get_real_path(ARGS[1] if ARGLEN == 2 else command[command.find(ARGS[1]):])
 
-        if path[0 : path.find("/") if path.count("/") != 0 else len(path)] in os.listdir(VARS.directory + "/") and path and SYS.win32:
+        if path[0 : path.find("/") if path.count("/") != 0 else len(path)] in [entry.name for entry in os.scandir(VARS.directory + "/")] and path and SYS.win32:
             path = VARS.directory + "/" + path
         
         elif SYS.posix:
@@ -63,20 +63,24 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
         
         path += "/"
         
-        for p in os.listdir(path):
-            t_path = path + p
-            if os.path.isdir(t_path):
-                size = get_directory_size(t_path)
+        for entry in os.scandir(path):
+            try:
+                if entry.is_dir():
+                    size = get_directory_size(entry.path)
+                    spaces = " " * (20 - len(str(size)))
+                    print(f"{size} byte(s){spaces}<Dir> {entry.name}")
+                    full_size += size
+                    folders += 1
+                    continue
+                size = entry.stat().st_size
                 spaces = " " * (20 - len(str(size)))
-                print(f"{size} byte(s){spaces}<Dir> {p}")
+                print(f"{size} byte(s){spaces}<File> {entry.name}")
                 full_size += size
-                folders += 1
-                continue
-            size = os.path.getsize(t_path)
-            spaces = " " * (20 - len(str(size)))
-            print(f"{size} byte(s){spaces}<File> {p}")
-            full_size += size
-            files += 1
+                files += 1
+            except:
+                errmsg(f"Error: Failed to access {entry.name}")
+                rgbl(color = DEF_COLORS["stdout"], seperator = "", fin = "", reset_color = False)
+                pass
         
         print(f"\n\t{full_size} byte(s)\n\t{files} file(s)\n\t{folders} dir(s)\n")
 
@@ -85,14 +89,7 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
     if IS_CMD("rd", arguments = ARGS, prefix = "std"):
         directory = VARS.directory
         if directory.count("/") - 1 >= 0:
-            if SYS.win32:
-                update_dir(directory[0 : find(directory, "/", directory.count("/") - 1) - 1])
-            else:
-                if directory.count("/") <= 1:
-                    errmsg("Error: Cannot have a null path")
-                    return True
-                
-                update_dir(directory[0 : find(directory, "/", directory.count("/") - 2) - 1])
+            update_dir(get_parent(directory))
         else:
             errmsg("Error: Cannot have a null path")
         return True
@@ -285,6 +282,41 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
         if not os.path.isdir(VARS.directory):
             if not update_dir(SYS.USRPROFILE):
                 errmsg("Error: System could not update directory")
+        return True
+    
+    if IS_CMD("add", arguments = ARGS, prefix = "std"):
+        
+        if ARGLEN < 2:
+            errmsg(f"Error: Expected at least 2 args, got {ARGLEN}")
+            return True
+
+        operator = ARGS[1]
+
+        if operator == "-n":
+            if ARGLEN < 5:
+                errmsg(f"Error: Expected at least 5 args, got {ARGLEN}")
+                return True
+            
+            variable = ARGS[2]
+
+            val_1 = ARGS[3]
+            val_2 = ARGS[4]
+
+            if not (get_type(val_1) in (float, int) or get_type(val_2) in (float, int)):
+                errmsg("Error: Values are not valid digits")
+                return True
+
+            add_usrvars((
+                variable,
+                round(
+                    float(val_1) + float(val_2), 4
+                ) if get_type(val_1) == float or get_type(val_2) == float else int(val_1) + int(val_2)
+            ))
+
+        return True
+    
+    if IS_CMD("reload", "restart", OS_FUNC = True, arguments = ARGS, prefix = "std"):
+        reload_pcmd()
         return True
 
     return False

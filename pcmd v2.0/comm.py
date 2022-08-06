@@ -191,10 +191,7 @@ def pcmd_interpret(file: str) -> None:
     lines = [i for i in open(file, "r").readlines() if i.strip() != ""]
 
     for val in lines:
-        command = add_vars(val.strip())
-
-        if command[0:2] == "//":
-            continue            
-
-        cmd(command)
+        command = remove_double_slash_comment(add_vars(val.strip())).replace("\\[DSLASH]\\", "//").strip()
+        if command:
+            cmd(command)
     return
