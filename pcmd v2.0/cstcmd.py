@@ -29,7 +29,7 @@ def cstcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
     # IS_CMD required parameters:
     #   * command: tuple - put this in first, it will serve as the name of the command.
     #   DO NOT USE SPACES IN THE COMMAND
-    #   DO NOT USE THE FOLLOWING STRINGS, IT WILL NOT WORK: "&&", "echo", "print", "pcmd"
+    #   DO NOT USE THE FOLLOWING STRINGS, IT WILL NOT WORK: "&&", "echo", "print", "pcmd", "captout", "if", "vfree"
     #   For multiple commands use IS_CMD("command_1", "command_2")
     
     #   arguments: list[str] - ALWAYS set this to ARGS unless you know what you are doing.

@@ -11,6 +11,8 @@
  - Added IS_CMD command for better command checking.
  - Fixed problem where you had to scroll to line ~300 to see any cmd functions.
  - Implemented less buggy features and improved upon the way things get interpreted overall.
+ - Added full support for posix-based operating systems.
+ - Added (experimental) syntax highlighting for .pcmd files in vscode.
 
 ## Use ##
 This project is still in an experimental phase and may be very buggy, if you still want to install it, just download the zip file and you may play around with whatever you want.
@@ -20,8 +22,8 @@ I cannot confirm a release date for conventional use as of yet, however expect i
 
 ## Things to add ##
 1. An installer for unix and windows.
-2. Better support for unix and windows (I think as of right now it is mostly OS compatible however I cannot say for sure).
-3. Better if statement handling.
-4. An updater for unix and windows.
-5. Better variables in .pcmd files.
-6. MORE COMMANDS.
+2. Better if statement handling.
+3. An updater for unix and windows.
+4. Better variables in .pcmd files.
+5. MORE COMMANDS.
+6. Improve variable type handling.

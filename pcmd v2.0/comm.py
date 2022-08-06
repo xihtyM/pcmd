@@ -31,11 +31,15 @@ def cmd(command: str) -> bool:
         Returns:
             True for success and False for error  """
     
+    re_implement_std_vars()
+    
     # Error checking
     command = command.strip()
     if not command:
         errmsg("Error: Expected at least one argument, got none.")
         return False
+    
+    command = add_vars(command)
 
     # Works like cmd args, where every space outside quotes appends to a list of arguments
     ARGS = vargs(command)
@@ -51,6 +55,72 @@ def cmd(command: str) -> bool:
     # Color text
 
     rgbl("", color = DEF_COLORS["stdout"], reset_color = False, fin = "")
+
+    if CIS_CMD("captout", arguments = ARGS):
+        if ARGLEN < 2:
+            errmsg(f"Error: Expected at least 2 arguments, got {ARGLEN}")
+            return True
+        
+        resultIO = StringIO()
+        stdout = sys.stdout
+        sys.stdout = resultIO
+        cmd(
+            get_command_from_arg_index(
+                command,
+                ARGS,
+                2
+            )
+        )
+        result = remove_ansi(resultIO.getvalue())
+        sys.stdout = stdout
+        add_usrvars((ARGS[1], result[0:len(result) - 1]))
+        return True
+    
+    if CIS_CMD("var", arguments = ARGS):
+        if ARGLEN < 2:
+            errmsg(f"Error: Expected at least 2 arguments, got {ARGLEN}")
+            return True
+        
+        var_name = ARGS[1]
+
+        if ARGLEN == 2:
+            add_usrvars((var_name, None))
+            return True
+        
+        variable = get_command_from_arg_index(command, ARGS, 2)
+        data_type = get_type(variable)
+
+        try:
+            variable = data_type(variable)
+        except ValueError:
+            errmsg("Error: Could not convert the type")
+            add_usrvars((var_name, None))
+            return True
+        
+        add_usrvars((var_name, variable))
+
+        return True
+    
+    if CIS_CMD("vfree", arguments = ARGS):
+        if ARGLEN < 2:
+            errmsg(f"Error: Expected at least 2 arguments, got {ARGLEN}")
+            return True
+        
+        variable_list = ARGS[1:]
+
+        for variable in variable_list:
+            rem_usrvars(variable)
+        
+        return True
+
+    if CIS_CMD("if", arguments = ARGS):
+        if_b = IF_CMD_INT(ARGS, ARGLEN)
+        if type(if_b) == bool:
+            print(if_b)
+        else:
+            cmd(get_command_from_arg_index(command, ARGS, if_b))
+        
+        return True
 
     if CIS_CMD("pcmd", OS_FUNC = True, arguments = ARGS):
         path = get_real_path(ARGS[1] if ARGLEN == 2 else command[command.find(ARGS[0]) + len(ARGS[0]):].strip())
@@ -121,7 +191,7 @@ def pcmd_interpret(file: str) -> None:
     lines = [i for i in open(file, "r").readlines() if i.strip() != ""]
 
     for val in lines:
-        command = pcmd_interpret_env(val.strip())
+        command = add_vars(val.strip())
 
         if command[0:2] == "//":
             continue            

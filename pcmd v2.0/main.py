@@ -22,7 +22,11 @@ while 1:
         cmd(command)
     except KeyboardInterrupt:
         # Press ctrl c to stop commands from running
-        pass
+        if SYS.win32:
+            pass
+        else:
+            cmd("cls")
+            pass
     except Exception as err:
         errmsg("Error:", err)
 

@@ -1,5 +1,10 @@
 # All defines/functions
 
+from ast import literal_eval
+from typing import Union as MultipleReturn
+import platform as SYSPLAT
+import re
+
 class VARS:
     directory = ""
 
@@ -10,7 +15,15 @@ class IMPORTS:
 
 class SYS:
     win32 = False
-    linux = False
+    posix = False
+    OSNAME = SYSPLAT.system()
+    FULLOSNAME = SYSPLAT.platform()
+    ARCH = SYSPLAT.machine()
+    USRPROFILE = ""
+
+USR_DEFINED_VARIABLES: list[tuple] = [
+    # DO NOT ADD DIRECTLY HERE, USE "add_usrvars" FUNCTION
+]
 
 # Colors dictionary
 
@@ -123,8 +136,6 @@ def vargs(command: str) -> list[str]:
 
 try:
     import os
-    SYS.linux = os.name == "posix"
-    SYS.win32 = os.name == "nt"
 except ImportError:
     errmsg("Error importing os module, all os-related commands have been disabled.")
     IMPORTS.OS = False
@@ -135,6 +146,9 @@ except ImportError:
     IMPORTS.TIME = False
 try:
     import sys
+    from io import StringIO
+    SYS.posix = sys.platform != "win32"
+    SYS.win32 = sys.platform == "win32"
 except ImportError:
     errmsg("Error importing sys module, all sys-related commands have been disabled.")
     IMPORTS.SYS = False
@@ -142,13 +156,13 @@ except ImportError:
 try:
     if SYS.win32:
         import msvcrt
-    elif SYS.linux:
+    elif SYS.posix:
         import tty, termios
 except ImportError:
     pass
 
 if IMPORTS.OS:
-    if SYS.linux:
+    if SYS.posix:
         def clear_screen() -> None:
             os.system("clear")
     elif SYS.win32:
@@ -204,12 +218,13 @@ def CIS_CMD(* command: tuple, OS_FUNC: bool = False, TIME_FUNC: bool = False, ar
 
 def IS_CMD(* command: tuple, OS_FUNC: bool = False, TIME_FUNC: bool = False, arguments: list[str], lwr: bool = True, prefix: str = "") -> bool:
     for i in tuple_to_lower(command):
-        if i in ("&&", "echo", "print", "pcmd"):
+        if i in ("&&", "echo", "print", "pcmd", "vfree", "captout", "if", "var"):
             errmsg(f"Error: Command {i} is reserved for comm.py only, do not use this name")
             return False
     
     if lwr:
         command = tuple_to_lower(command)
+        prefix = prefix.lower()
 
     if(len(arguments) < 1):
         return False
@@ -247,6 +262,9 @@ def remove_path_from(path: str, remove: str) -> str:
         if string != remove * len(string):
             end += string + "/"
     
+    if SYS.posix:
+        end = "/" + end
+    
     return end
     
 def finish() -> None:
@@ -271,6 +289,14 @@ def get_real_path(path: str) -> str:
         return ""
     
     return formatted_path
+
+# MORE VARIABLES
+
+SYS.USRPROFILE = get_real_path(os.path.expanduser("~/"))
+
+if not VARS.directory:
+    update_dir(SYS.USRPROFILE)
+
 
 def get_directory_size(path: str) -> int:
     if not os.path.isdir(path):
@@ -311,8 +337,8 @@ def getch() -> str:
         Returns: Char inputted whilst waiting """
 
     if SYS.win32:
-        return msvcrt.getch()
-    elif SYS.linux:
+        return str(msvcrt.getch(), "utf-8")
+    elif SYS.posix:
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
         try:
@@ -368,5 +394,202 @@ def get_parent(path: str) -> str:
     c = path.count("/")
     return path[0 : find(path, "/", c - 1) - 1 if c > 0 else len(path)]
 
-def pcmd_interpret_env(command: str) -> str:
-    return command.replace("{GETVAR(CWD)}", VARS.directory).replace("{GETVAR(DESKTOP)}", get_real_path(os.getenv("USERPROFILE")) + "/Desktop" if SYS.win32 else "/home/desktop").replace("{GETVAR(RUNPATH)}", getcwd())
+def add_vars(command: str) -> str:
+
+    for USR_VAR in USR_DEFINED_VARIABLES:
+        c = vargs(command)[0]
+        
+        command = command[len(c):].lstrip()
+        command = command.replace("{" + USR_VAR[0] + "}", str(USR_VAR[1]))
+        command = c + " " + command
+
+    return command
+
+def add_usrvars(var: tuple[str, any]) -> None:
+    if var[0].find("}") != -1 or var[0].find("{") != -1:
+        errmsg("Error: Could not create variable, illegal usage - { or } are not allowed for use in variables as they are used to initilize them")
+        return
+    for index, v in enumerate(USR_DEFINED_VARIABLES):
+        if v[0] == var[0]:
+            USR_DEFINED_VARIABLES[index] = var
+            return
+    
+    USR_DEFINED_VARIABLES.append(var)
+
+def rem_usrvars(var_name: str) -> bool:
+    """ Removes a variable from USR_DEFINED_VARIABLES \n
+        Returns true if variable was found, otherwise false """
+    for index, tuples in enumerate(USR_DEFINED_VARIABLES):
+        if tuples[0] == var_name:
+            USR_DEFINED_VARIABLES.pop(index)
+            return True
+    return False
+    
+def IF_CMD_INT(ARGS: list[str], ARGLEN: int) -> MultipleReturn[int, bool]:
+    equal = not_equal = False
+    arg1_type = get_type(ARGS[1])
+    add = arg1_type(ARGS[1])
+    
+    if arg1_type == bool:
+        add = 1 if ARGS[1] == "True" else 0
+
+    add_2 = ""
+    skip = False
+
+    for ind, val in enumerate(ARGS):
+        if ind == 0 or skip:
+            skip = False
+            continue
+        
+        if val == "+":
+            if ind <= 1 or ind >= ARGLEN:
+                errmsg(f"If syntax error: Did not expect + at position {ind}")
+                return False
+
+            ind_type = get_type(ARGS[ind + 1])
+            
+
+            if equal or not_equal:
+                if type(add_2) == bool:
+                    if add_2 == False:
+                        add_2 = 0
+                    else:
+                        add_2 = 1
+                
+                if type(add_2) == ind_type:
+                    add_2 += ind_type(ARGS[ind + 1])
+                elif type(add_2) in (int, float) and ind_type in (int, float):
+                    if ind_type == float or type(add_2) == float:
+                        add_2 = float(add_2) + float(ARGS[ind + 1])
+                    else:
+                        add_2 = add_2 + int(ARGS[ind + 1])
+                elif type(add_2) != ind_type and ind_type == str:
+                    add_2 = str(add_2) + ARGS[ind + 1]
+            else:
+                if type(add) == bool:
+                    if add == False:
+                        add = 0
+                    else:
+                        add = 1
+                
+                if type(add) == ind_type:
+                    add += ind_type(ARGS[ind + 1])
+                elif type(add) in (int, float) and ind_type in (int, float):
+                    if ind_type == float or type(add_2) == float:
+                        add = float(add) + float(ARGS[ind + 1])
+                    else:
+                        add = add + int(ARGS[ind + 1])
+                elif type(add) != ind_type and ind_type == str:
+                    add = str(add) + ARGS[ind + 1]
+                
+            skip = True
+        
+        if val == "-":
+            if ind <= 1 or ind >= ARGLEN:
+                errmsg(f"If syntax error: Did not expect - at position {ind}")
+                return False
+            
+            ind_type = get_type(ARGS[ind + 1])
+            
+            if equal or not_equal:
+                if type(add_2) in (int, float) and ind_type in (int, float):
+                    if ind_type == float or type(add_2) == float:
+                        add_2 = float(add_2) - float(ARGS[ind + 1])
+                    else:
+                        add_2 = add_2 - int(ARGS[ind + 1])
+                else:
+                    errmsg(f"If syntax error: Can only subtract numbers at position {ind}")
+                    return False
+            else:
+                if type(add) in (int, float) and ind_type in (int, float):
+                    if ind_type == float or type(add) == float:
+                        add = float(add) - float(ARGS[ind + 1])
+                    else:
+                        add = add - int(ARGS[ind + 1])
+                else:
+                    errmsg(f"If syntax error: Can only subtract numbers at position {ind}")
+                    return False
+
+            skip = True
+
+        if val == "==":
+            if not_equal or equal or ind >= ARGLEN - 1:
+                errmsg(f"If syntax error: Did not expect == at position {ind}")
+                return False
+
+            equal = True
+            add_2 = get_type(ARGS[ind + 1])(ARGS[ind + 1])
+        
+        if val == "!=":
+            if not_equal or equal or ind >= ARGLEN - 1:
+                errmsg(f"If syntax error: Did not expect != at position {ind}")
+                return False
+
+            not_equal = True
+            add_2 = get_type(ARGS[ind + 1])(ARGS[ind + 1])
+        
+        if val == "do":
+            is_equal = (add == add_2 and equal)
+            is_not_equal = (add != add_2 and not_equal)
+            is_str_and_add_or_1 = ((not (not_equal or equal)) and add == 1 or (type(add) == str and not add_2))
+            
+            end: bool = is_equal or is_not_equal or is_str_and_add_or_1
+            
+            return (ind + 1 if end else end)
+        
+    is_equal = (add == add_2 and equal)
+    is_not_equal = (add != add_2 and not_equal)
+    is_str_and_add_or_1 = ((not (not_equal or equal)) and add == 1 or (type(add) == str and not add_2))
+    
+    end: bool = is_equal or is_not_equal or is_str_and_add_or_1
+    
+    return (end)
+
+def get_type(val: str) -> type:
+    try:
+        t = literal_eval(val)
+        return type(t)
+    except:
+        return type(val)
+
+def remove_ansi(line: str) -> str:
+    ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
+    return ansi_escape.sub('', line)
+
+def re_implement_std_vars() -> None:
+    """ALL STANDARD DEFINED USRVARS - CANNOT BE FREED UNTIL PROGRAM ENDS"""
+    
+    add_usrvars((
+        "__USR__",
+        SYS.USRPROFILE                                                                           # Path to USRPROFILE
+    ))
+    
+    add_usrvars((
+        "__DESKTOP__",
+        SYS.USRPROFILE + "/Desktop"                                                              # Path to desktop
+    ))
+    
+    add_usrvars((
+        "__CWD__",
+        VARS.directory                                                                           # Current directory
+    ))
+
+    add_usrvars((
+        "__RUNPATH__",
+        getcwd()                                                                                 # Path to main.py
+    ))
+    
+    add_usrvars((
+        "__OSNAME__",
+        SYS.OSNAME                                                                               # Operating system short name
+    ))
+    
+    add_usrvars((
+        "__FULLOSNAME__",
+        SYS.FULLOSNAME                                                                           # Full operating system name
+    ))
+    
+    add_usrvars((
+        "__ARCH__",
+        SYS.ARCH                                                                                 # Architecture computer uses
+    ))

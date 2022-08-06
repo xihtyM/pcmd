@@ -11,83 +11,6 @@ except ImportError as err:
 def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
     """Standard pcmd interpreter for commands"""
 
-    if IS_CMD("if", arguments = ARGS, prefix = "std"):
-        equal = not_equal = False
-        add = int(ARGS[1]) if ARGS[1].isdigit() else ARGS[1]
-        add_2 = ""
-        skip = False
-        for ind, val in enumerate(ARGS):
-            if ind == 0 or skip:
-                skip = False
-                continue
-            
-            if val == "+":
-                if ind <= 1 or ind >= ARGLEN:
-                    errmsg(f"If syntax error: Did not expect + at position {ind}")
-                    return True
-                
-                if equal or not_equal:
-                    add_2 = add_2 + int(ARGS[ind + 1]) if type(add_2) == int and ARGS[ind + 1].isdigit() else str(add_2) + ARGS[ind + 1]
-                else:
-                    add = add + int(ARGS[ind + 1]) if type(add) == int and ARGS[ind + 1].isdigit() else str(add) + ARGS[ind + 1]
-
-                skip = True
-            
-            if val == "-":
-                if ind <= 1 or ind >= ARGLEN:
-                    errmsg(f"If syntax error: Did not expect - at position {ind}")
-                    return True
-                
-                if equal or not_equal:
-                    if type(add_2) == int and ARGS[ind + 1].isdigit():
-                        add_2 = add_2 - int(ARGS[ind + 1])
-                    else:
-                        errmsg(f"If syntax error: Can only subtract positive integers at position {ind}")
-                        return True
-                else:
-                    if type(add) == int and ARGS[ind + 1].isdigit():
-                        add = add - int(ARGS[ind + 1])
-                    else:
-                        errmsg(f"If syntax error: Can only subtract positive integers at position {ind}")
-                        return True
-
-                skip = True
-
-            if val == "==":
-                if not_equal or equal or ind >= ARGLEN - 1:
-                    errmsg(f"If syntax error: Did not expect == at position {ind}")
-                    return True
-
-                equal = True
-                add_2 = int(ARGS[ind + 1]) if ARGS[ind + 1].isdigit() else ARGS[ind + 1]
-            
-            if val == "!=":
-                if not_equal or equal or ind >= ARGLEN - 1:
-                    errmsg(f"If syntax error: Did not expect != at position {ind}")
-                    return True
-
-                not_equal = True
-                add_2 = int(ARGS[ind + 1]) if ARGS[ind + 1].isdigit() else ARGS[ind + 1]
-
-            if val == "do":
-                if (add == add_2 and equal) or (add != add_2 and not_equal) or ((not (not_equal or equal)) and add == 1 or (type(add) == str and not add_2)):
-                    NEW_ARGS = ARGS[ind + 1:]
-                    NEW_ARGLEN = len(NEW_ARGS)
-                    new_command = get_command_from_arg_index(command, ARGS, ind)
-
-                    if CIS_CMD("echo", "print", arguments = NEW_ARGS):
-                        print(new_command[new_command.find(NEW_ARGS[0]) + 5:].strip().replace("\\n", "\n").replace("\\t","\t"))
-                        return True
-
-                    SUCCESS = stdcmd_interpret(new_command, NEW_ARGS, NEW_ARGLEN)
-                    if not SUCCESS:
-                        errmsg("Command not found:", NEW_ARGS[0])
-                return True
-
-        print((add == add_2 and equal) or (add != add_2 and not_equal) or ((not (not_equal or equal)) and add == 1 or (type(add) == str and not add_2)))
-        
-        return True
-
     if IS_CMD("cls", "clear", OS_FUNC = True, arguments = ARGS, prefix = "std"):
         clear_screen()
         return True
@@ -100,8 +23,11 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
         
         path = get_real_path(ARGS[1] if ARGLEN == 2 else command[command.find(ARGS[1]):])
 
-        if path[0 : path.find("/") if path.count("/") != 0 else len(path)] in os.listdir(VARS.directory + "/") and path:
+        if path[0 : path.find("/") if path.count("/") != 0 else len(path)] in os.listdir(VARS.directory + "/") and path and SYS.win32:
             path = VARS.directory + "/" + path
+        
+        elif SYS.posix:
+            path = path if os.path.isdir(path) else VARS.directory + path
         
         if path[1] != ":" and SYS.win32:
             errmsg("Error: Path does not exist")
@@ -159,7 +85,14 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
     if IS_CMD("rd", arguments = ARGS, prefix = "std"):
         directory = VARS.directory
         if directory.count("/") - 1 >= 0:
-            update_dir(directory[0 : find(directory, "/", directory.count("/") - 1) - 1])
+            if SYS.win32:
+                update_dir(directory[0 : find(directory, "/", directory.count("/") - 1) - 1])
+            else:
+                if directory.count("/") <= 1:
+                    errmsg("Error: Cannot have a null path")
+                    return True
+                
+                update_dir(directory[0 : find(directory, "/", directory.count("/") - 2) - 1])
         else:
             errmsg("Error: Cannot have a null path")
         return True
@@ -181,6 +114,7 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
             DEF_COLORS["dir"] = COLORS["purple"]
             DEF_COLORS["stdout"] = COLORS["light-blue"]
             return True
+        
 
         # Guard
         if ARGLEN != 3:
@@ -188,6 +122,15 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
             return True
         
         color = ARGS[2]
+        
+        if operator == "-g":
+            color = color.replace("-c", "cmd").replace("-s", "cmd_seperator").replace("-d", "dir").replace("-t", "stdout")
+            if not color in DEF_COLORS:
+                errmsg(f"Color does not exist: {ARGS[2]}\nSee -colors for more info.")
+                return True
+            
+            print(next((name for name, clr in COLORS.items() if clr == DEF_COLORS[color]), None))
+            return True
 
         if not color in COLORS:
             errmsg(f"Color does not exist: {ARGS[2]}\nSee -colors for more info.")
@@ -266,10 +209,11 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
         return True
     
     if IS_CMD("mkdir", OS_FUNC = True, arguments = ARGS, prefix = "std"):
-        if ARGLEN != 2:
+        if ARGLEN < 2:
             errmsg(f"Error: Expected 2 arguments, got {ARGLEN}")
             return True
-        directory_name = ARGS[1]
+        
+        directory_name = ARGS[1] if ARGLEN == 2 else get_command_from_arg_index(command, ARGS, 1)
         full_dir = add_dir(directory_name)
         
         end_dir = directory_name if os.path.isdir(get_parent(directory_name)) else full_dir
@@ -289,6 +233,58 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
 
         return True
     
+    if IS_CMD("read", arguments = ARGS, prefix = "std"):
+        if ARGLEN < 2:
+            errmsg(f"Error: Expected at least 2 arguments, got {ARGLEN}")
+            return True
+        
+
+        operator = ARGS[1]
+
+        if operator == "-f" or operator == "-fv":
+            
+            file_st = 2 if operator == "-f" else 3
+
+            if ARGLEN < file_st + 1:
+                errmsg(f"Error: Expected 3 arguments, got {ARGLEN}")
+                return True
+
+            file = ARGS[file_st] if ARGLEN == file_st + 1 else get_command_from_arg_index(command, ARGS, file_st)
+
+            read_file = file if os.path.isdir(get_parent(file)) else add_dir(file)
+
+            contents = open(read_file, "r").read()
+
+            if operator == "-f":
+                print(contents)
+            else:
+                add_usrvars((ARGS[file_st - 1], contents))
+        
+        elif operator == "-c":
+            if ARGLEN < 3:
+                print(getch())
+            else:
+                variable = ARGS[2] if ARGLEN == 3 else get_command_from_arg_index(command, ARGS, 2)
+                add_usrvars((variable, getch()))
+        
+        elif operator == "-l":
+            if ARGLEN < 3:
+                print(input())
+            else:
+                variable = ARGS[2] if ARGLEN == 3 else get_command_from_arg_index(command, ARGS, 2)
+                add_usrvars((variable, input()))
+
+        return True
     
+    if IS_CMD("sys", arguments = ARGS, prefix = "std"):
+        if ARGLEN == 1:
+            print(f"\nSystem information:\n\nOperating system: {SYS.OSNAME}\nArchitecture: {SYS.ARCH}\nFull platform name: {SYS.FULLOSNAME}\n")
+        return True
+
+    if IS_CMD("upos", arguments = ARGS, prefix = "std"):
+        if not os.path.isdir(VARS.directory):
+            if not update_dir(SYS.USRPROFILE):
+                errmsg("Error: System could not update directory")
+        return True
 
     return False

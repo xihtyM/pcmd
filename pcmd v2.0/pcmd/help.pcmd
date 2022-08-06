@@ -1,0 +1,39 @@
+// HELP COMMAND
+
+// Store all colors in variable to reset to after
+
+captout TEXT_COLOR color -g -t
+
+echo \nTo use a .pcmd file, write code line by line as if you were executing it from the normal pcmd terminal.\n
+
+// Add red color for stdout
+color -t red
+
+echo NOTES:\n
+echo Note 1: All system variables cannot be modified or freed with vfree.
+echo Note 2: Do not use "__" before or after variable names as they are reserved for system variables and may cause errors.\n
+
+// Add purple color for stdout
+color -t purple
+
+echo To use a variable, access it the way you normally would in the command line.
+echo List of system variables:\n
+
+// Add orange color for stdout
+color -t orange
+
+echo __CWD__: The directory that the user is in.\n
+echo __RUNPATH__: The directory of the main file for pcmd.\n
+echo __OSNAME__: The name of the OS (e.g. "Windows" or "Linux").\n
+echo __FULLOSNAME__: __OSNAME__ but with more details.\n
+echo __ARCH__: The architecture of the machine (e.g. "AMD64").\n
+echo __USR__: The location of the current user directory.
+echo (On windows it would most likely be "C:/Users/username" and on linux it would most likely be "/home/username").\n
+echo __DESKTOP__: The location of the desktop directory.
+
+// Add a newline character to end
+echo
+
+color -t {TEXT_COLOR} && vfree TEXT_COLOR
+
+var i True
