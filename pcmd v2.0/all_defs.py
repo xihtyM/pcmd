@@ -1,10 +1,9 @@
 # All defines/functions
 
 from ast import literal_eval
-from statistics import mean
 from typing import Union as MultipleReturn
 import platform as SYSPLAT
-import re
+import re, subprocess
 
 class VARS:
     directory = ""
@@ -31,6 +30,9 @@ class SYS:
         "__ARCH__"
     )
     SYSTEM_VARNAME_PROTECT = False
+    PY_VERSION = SYSPLAT.python_version()
+    PY_PREFIX = "python3" if PY_VERSION[0] == "3" else "python"
+    DEPRECATION_WARNINGS = True
 
 USR_DEFINED_VARIABLES: list[tuple] = [
     # DO NOT ADD DIRECTLY HERE, USE "add_usrvars" FUNCTION
@@ -103,46 +105,23 @@ def vargs(command: str) -> list[str]:
     if not command:
         return []
     
+    command = command.replace("\'", "\"")
+
+    in_quotes = False
+
     # List variable of all args to return
     lst = []
 
-    # If in quotation marks variable
-    quotes = False
-
-    # If previous char is a space
-    previous_space = False
-
-    # Unappended string
-    args = ""
+    split_at_quotes = [split_quotes.strip() for split_quotes in command.split("\"") if split_quotes.strip()]
     
-    # Loop through chars in command
-    for chr in command:
-
-        # If char is not a space or inside of quotes
-        if chr != " " or quotes:
-            
-            # If char is a quotation mark
-            if chr in ("\"", "\'"):
-                quotes = not quotes
-                continue
-
-            # If not add char to unappended string and continue
-            args += chr
-            previous_space = False
+    for end in split_at_quotes:
+        in_quotes = not in_quotes
+        if in_quotes:
+            for end_values in end.split():
+                lst.append(end_values)
             continue
-        
-        # If the last character is not a space and chr is not in quotes
-        if not (previous_space or quotes):
-            lst.append(args)
-            args = ""
-        
-        # If chr is a space
-        previous_space = True
+        lst.append(end)
 
-    # If there are leftover args, append them
-    if args:
-        lst.append(args)
-    
     return lst
 
 try:
@@ -213,11 +192,8 @@ def tuple_to_lower(tp: tuple) -> tuple:
 	return tuple(tuple_list)
 
 def get_float_place(value: float) -> int:
-    float_place = 0
-    while int(value) != value:
-        value = value * 10
-        float_place += 1
-    return float_place
+    place = str(value)[::-1].find(".")
+    return place if place != -1 else 0
 
 def CIS_CMD(* command: tuple, OS_FUNC: bool = False, TIME_FUNC: bool = False, arguments: list[str], lwr: bool = True) -> bool:
     if lwr:
@@ -311,12 +287,6 @@ def get_real_path(path: str) -> str:
     
     return formatted_path
 
-# MORE VARIABLES
-
-SYS.USRPROFILE = get_real_path(os.path.expanduser("~/"))
-
-if not VARS.directory:
-    update_dir(SYS.USRPROFILE)
 
 
 def get_directory_size(path: str) -> int:
@@ -413,11 +383,41 @@ def add_dir(path: str) -> str:
 
 def get_parent(path: str) -> str:
     c = path.count("/")
-    if c - 1 >= 0:
+    if c >= 1:
         if SYS.win32:
             return path[0 : find(path, "/", c - 1) - 1]
         else:
-            return path[0 : find(path, "/", c - 2) - 1]
+            if c >= 2:
+                return path[0 : find(path, "/", c - 2) - 1]
+            return path
+
+# MORE VARIABLES
+
+if IMPORTS.OS:
+    SYS.USRPROFILE = get_real_path(os.path.expanduser("~/"))
+
+    if not VARS.directory or not os.path.isdir(VARS.directory):
+        parent = VARS.directory
+        update_dir(SYS.USRPROFILE)
+        for i in range(parent.count("/")):
+            parent = get_parent(parent)
+            if os.path.isdir(parent):
+                update_dir(parent)
+                break
+    
+    def get_file_entry_from_directory(file: str) -> os.DirEntry[str]:
+        file =  file.lower()
+        for entry in os.scandir(VARS.directory + "/"):
+            if entry.is_file() and (entry.name.lower().startswith(file + ".") or entry.name.lower() == file):
+                return entry
+        raise FileNotFoundError("Error: get_file_entry_from_directory() function could not find file:", file)
+    
+    def get_dir_entry_from_directory(dir: str) -> os.DirEntry[str]:
+        dir =  dir.lower()
+        for entry in os.scandir(VARS.directory + "/"):
+            if entry.is_dir() and entry.name.lower() == dir:
+                return entry
+        raise FileNotFoundError("Error: get_dir_entry_from_directory() function could not find directory:", dir)
 
 def add_vars(command: str) -> str:
 
@@ -486,7 +486,6 @@ def IF_CMD_INT(ARGS: list[str], ARGLEN: int) -> MultipleReturn[int, bool]:
 
             ind_type = get_type(ARGS[ind + 1])
             
-
             if equal or not_equal:
                 if type(add_2) == bool:
                     if add_2 == False:
@@ -581,10 +580,11 @@ def IF_CMD_INT(ARGS: list[str], ARGLEN: int) -> MultipleReturn[int, bool]:
             return (ind + 1 if end else end)
         
     is_equal = (add == add_2 and equal)
-    float_is_equal = ((type(add) == float and type(add_2) == float and (
-                add_2 - (5 / 10**get_float_place(add_2))) <= add <= (add_2 + (5 / 10**get_float_place(add_2))
-                )
-            ) and equal)
+    float_place_add = get_float_place(add)
+    float_precision = 50 ** -float_place_add
+
+    float_is_equal = (type(add) in (int, float) and type(add_2) in (int, float)) and (((add - float_precision) if float_place_add > 4 else add) >= add_2 >= ((add + float_precision) if float_place_add > 4 else add))
+    
     is_not_equal = (add != add_2 and not_equal)
     is_str_and_add_or_1 = ((not (not_equal or equal)) and add == 1 or (type(add) == str and not add_2))
     
@@ -619,13 +619,18 @@ def remove_double_slash_comment(line: str) -> str:
     double_slash_comment = False
     in_quotes = False
 
-    if line.find("//") == -1:
-        return line
+    double_slash = line.find("//")
 
-    for ind, ch in enumerate(line):
+    if double_slash == -1:
+        return line
+    
+    start = line.find("\"")
+    start = start if start < double_slash and start != -1 else double_slash
+
+    for ind, ch in enumerate(line[start:]):
         if ch == "/" and not in_quotes:
             if double_slash_comment:
-                return line[0 : ind - 1]
+                return line[0 : start + ind - 1]
             double_slash_comment = True
             continue
         if ch == "\"":
@@ -635,10 +640,14 @@ def remove_double_slash_comment(line: str) -> str:
     return line
 
 def reload_pcmd() -> None:
-    print("Reloading...")
-    MAIN_FILE = getcwd() + "/main.py"
-    clear_screen()
-    
+    if not SYS.DEPRECATION_WARNINGS:
+        print("Reloading...")
+        MAIN_FILE = getcwd() + "/main.py"
+        clear_screen()
+        os.startfile(MAIN_FILE)
+        finish()
+    else:
+        errmsg("WARNING: reload_pcmd() function is deprecated as of now")
 
 # ALL VARIABLES
 

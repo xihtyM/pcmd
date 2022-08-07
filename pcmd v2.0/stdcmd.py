@@ -54,7 +54,11 @@ def stdcmd_interpret(command: str, ARGS: list[str], ARGLEN: int) -> bool:
         path = get_real_path(path)
 
         if not os.path.isdir(path):
-            errmsg("Error: Path does not exist.")
+            errmsg("Error: Path does not exist")
+            return True
+
+        if path[1] != ":" and SYS.win32:
+            errmsg("Error: Path does not exist")
             return True
         
         print(f"\nDirectory of {path}\n")

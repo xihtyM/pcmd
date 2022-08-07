@@ -180,6 +180,24 @@ def cmd(command: str) -> bool:
 
     if STDCMD_FOUND:
         return True
+    
+    # Run file command
+    if command.startswith("./"):
+        if not IMPORTS.OS:
+            errmsg("Error: Failed to import os, this function has been disabled")
+            return True
+        
+        file = command[2:].strip()
+
+        try:
+            entry = get_file_entry_from_directory(file)
+        except FileNotFoundError:
+            errmsg("Error: Path is not a file or could not be found")
+            return True
+        
+        os.startfile(get_real_path(entry.path))
+
+        return True
 
     errmsg("Command not found:", ARGS[0])
     return False
