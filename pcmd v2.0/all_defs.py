@@ -34,6 +34,10 @@ class SYS:
     PY_PREFIX = "python3" if PY_VERSION[0] == "3" else "python"
     DEPRECATION_WARNINGS = True
 
+    def WaitForKeyboardInterruptOrEOF() -> None:
+        """ Waits to stop KeyboardInterrupt/EOF errors """
+        time.sleep(SYS.LOW_FLOAT)
+
 USR_DEFINED_VARIABLES: list[tuple] = [
     # DO NOT ADD DIRECTLY HERE, USE "add_usrvars" FUNCTION
 ]
