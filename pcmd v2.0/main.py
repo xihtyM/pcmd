@@ -48,6 +48,7 @@ def main() -> None:
             return None
     except Exception as err:
         errmsg("Error:", err)
+    return None
 
 if __name__ == "__main__":
     while 1:
