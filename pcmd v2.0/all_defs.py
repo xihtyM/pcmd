@@ -33,6 +33,7 @@ class SYS:
     PY_VERSION = SYSPLAT.python_version()
     PY_PREFIX = "python3" if PY_VERSION[0] == "3" else "python"
     DEPRECATION_WARNINGS = True
+    LOW_FLOAT = 1.0e-323
 
     def WaitForKeyboardInterruptOrEOF() -> None:
         """ Waits to stop KeyboardInterrupt/EOF errors """
